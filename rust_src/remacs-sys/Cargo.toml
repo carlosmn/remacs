@@ -1,0 +1,28 @@
+[package]
+name = "remacs-sys"
+version = "0.1.0"
+description = "Generated bindings for the C code"
+build = "build.rs"
+edition = "2018"
+
+[dependencies]
+libc = "0.2"
+field-offset = "0.1.1"
+
+[build-dependencies]
+libc = "0.2"
+regex = "0.2"
+bindgen = { git = "https://github.com/rust-lang-nursery/rust-bindgen.git", rev = "badb49277dddf1ea5d407075f9deea48897b52df" }
+
+[features]
+# Treat warnings as a build error on Travis.
+strict = []
+
+[profile.release]
+panic = "abort"
+lto = true
+
+[profile.dev]
+panic = "abort"
+lto = true
+

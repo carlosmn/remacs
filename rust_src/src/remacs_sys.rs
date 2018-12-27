@@ -21,19 +21,11 @@ use std;
 use libc::timespec;
 use remacs_lib::current_timespec;
 
-use crate::{
-    data::{
-        Lisp_Boolfwd, Lisp_Buffer_Objfwd, Lisp_Fwd, Lisp_Intfwd, Lisp_Kboard_Objfwd, Lisp_Objfwd,
-    },
-    lisp::LispObject,
+use crate::data::{
+    Lisp_Boolfwd, Lisp_Buffer_Objfwd, Lisp_Fwd, Lisp_Intfwd, Lisp_Kboard_Objfwd, Lisp_Objfwd,
 };
 
-include!(concat!(env!("OUT_DIR"), "/definitions.rs"));
-
-type Lisp_Object = LispObject;
-
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
-include!(concat!(env!("OUT_DIR"), "/globals.rs"));
+pub use ::remacs_sys::*;
 
 pub const VAL_MAX: EmacsInt = (EMACS_INT_MAX >> (GCTYPEBITS - 1));
 pub const VALMASK: EmacsInt = [VAL_MAX, -(1 << GCTYPEBITS)][USE_LSB_TAG as usize];
@@ -131,14 +123,6 @@ extern "C" {
 
 // Max value for the first argument of wait_reading_process_output.
 pub const WAIT_READING_MAX: i64 = std::i64::MAX;
-
-// In order to use `lazy_static!` with LispSubr, it must be Sync. Raw
-// pointers are not Sync, but it isn't a problem to define Sync if we
-// never mutate LispSubr values. If we do, we will need to create
-// these objects at runtime, perhaps using forget().
-//
-// Based on http://stackoverflow.com/a/28116557/509706
-unsafe impl Sync for Lisp_Subr {}
 
 pub type Lisp_Buffer = buffer;
 pub type Lisp_Frame = frame;

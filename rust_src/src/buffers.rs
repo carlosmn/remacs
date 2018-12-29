@@ -20,7 +20,10 @@ use crate::{
     lisp::{ExternalPtr, LispMiscRef, LispObject, LiveBufferIter},
     lists::{car, cdr, list, member},
     lists::{LispConsCircularChecks, LispConsEndChecks},
-    marker::{build_marker, marker_buffer, marker_position_lisp, set_marker_both, LispMarkerRef},
+    marker::{
+        buf_charpos_to_bytepos, build_marker, marker_buffer, marker_position_lisp, set_marker_both,
+        LispMarkerRef,
+    },
     multibyte::LispStringRef,
     multibyte::{multibyte_length_by_head, string_char},
     numbers::MOST_POSITIVE_FIXNUM,
@@ -234,6 +237,20 @@ impl LispBufferRef {
         };
 
         unsafe { self.beg_addr().offset(offset + n - self.beg_byte()) }
+    }
+
+    /// Return the address of char position N in the current buffer
+    pub fn char_pos_addr(mut self, n: ptrdiff_t) -> *mut c_uchar {
+        let offset = if n >= self.gpt_byte() {
+            self.gap_size()
+        } else {
+            0
+        };
+
+        unsafe {
+            self.beg_addr()
+                .offset(offset + buf_charpos_to_bytepos(self.as_mut(), n) + -self.beg_byte())
+        }
     }
 
     /// Return the address of character at byte position BYTE_POS.

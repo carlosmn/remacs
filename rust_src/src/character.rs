@@ -1,16 +1,18 @@
 //! Operations on characters.
 
 use libc::{c_uchar, ptrdiff_t};
+use std::ptr;
 
 use remacs_macros::lisp_fn;
 
 use crate::{
     lisp::defsubr,
     lisp::LispObject,
-    multibyte::{make_char_multibyte, raw_byte_from_codepoint_safe},
-    multibyte::{Codepoint, MAX_CHAR},
-    remacs_sys::EmacsInt,
+    multibyte::{char_byte8_p, char_to_byte8, is_ascii, Codepoint, MAX_CHAR},
+    multibyte::{make_char_multibyte, raw_byte_from_codepoint_safe, string_char},
     remacs_sys::Qcharacterp,
+    remacs_sys::{args_out_of_range, args_out_of_range_3},
+    remacs_sys::{EmacsInt, EmacsUint},
     threads::ThreadState,
 };
 
@@ -104,6 +106,60 @@ pub fn multibyte_char_to_unibyte(ch: LispObject) -> LispObject {
     } else {
         raw_byte_from_codepoint_safe(c).into()
     }
+}
+
+/// Return a byte value of a character at point.
+///
+/// Optional 1st arg POSITION, if non-nil, is a position of a character to get a byte value.
+///
+/// Optional 2nd arg STRING, if non-nil, is a string of which first character is a target to get a
+/// byte value.  In this case, POSITION, if non-nil, is an index of a target character in the
+/// string.
+///
+/// If the current buffer (or STRING) is multibyte, and the target character is not ASCII nor
+/// 8-bit character, an error is signaled.
+#[lisp_fn(min = "0")]
+pub fn get_byte(position: LispObject, string: LispObject) -> EmacsUint {
+    let current_buffer = ThreadState::current_buffer_unchecked();
+    let p: *const c_uchar;
+    if string.is_nil() {
+        if position.is_nil() {
+            p = current_buffer.byte_pos_addr(current_buffer.pt);
+        } else {
+            let pos = position.as_fixnum_coerce_marker_or_error();
+            if pos < (current_buffer.begv as i64) || pos >= (current_buffer.zv as i64) {
+                args_out_of_range!(position, current_buffer.begv, current_buffer.zv)
+            }
+            let pos = position.as_natnum_or_error();
+            p = current_buffer.char_pos_addr(pos as ptrdiff_t);
+        }
+        if !current_buffer.multibyte_characters_enabled() {
+            return unsafe { (*p).into() };
+        }
+    } else {
+        let s = string.as_string_or_error();
+        if position.is_nil() {
+            p = s.const_data_ptr();
+        } else {
+            let pos = position.as_natnum_or_error();
+            if position.as_fixnum_or_error() >= s.len_chars() as i64 {
+                args_out_of_range!(string, position);
+            }
+            p = unsafe { s.const_data_ptr().offset(s.char_to_byte(pos as isize)) };
+        }
+        if !s.is_multibyte() {
+            return unsafe { (*p).into() };
+        }
+    }
+
+    let mut c: u32 = unsafe { string_char(p, ptr::null_mut(), ptr::null_mut()) } as u32;
+    if char_byte8_p(c) {
+        c = char_to_byte8(c).into();
+    } else if !is_ascii(c) {
+        error!("Not an ASCII nor an 8-bit character: {}", c);
+    }
+
+    c.into()
 }
 
 include!(concat!(env!("OUT_DIR"), "/character_exports.rs"));

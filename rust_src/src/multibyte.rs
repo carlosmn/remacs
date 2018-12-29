@@ -42,7 +42,9 @@ use crate::{
     lisp::{ExternalPtr, LispObject},
     remacs_sys::Qstringp,
     remacs_sys::{char_bits, equal_kind, EmacsDouble, EmacsInt, Lisp_String, Lisp_Type},
-    remacs_sys::{compare_string_intervals, empty_unibyte_string, lisp_string_width},
+    remacs_sys::{
+        compare_string_intervals, empty_unibyte_string, lisp_string_width, string_char_to_byte,
+    },
 };
 
 pub type LispStringRef = ExternalPtr<Lisp_String>;
@@ -170,6 +172,11 @@ impl LispStringRef {
 
     pub fn set_byte(&mut self, idx: ptrdiff_t, elt: c_uchar) {
         unsafe { ptr::write(self.data_ptr().offset(idx), elt) };
+    }
+
+    /// Return the byte index corresponding to CHAR_INDEX.
+    pub fn char_to_byte(&self, char_index: isize) -> isize {
+        unsafe { string_char_to_byte((*self).into(), char_index) }
     }
 
     pub fn equal(

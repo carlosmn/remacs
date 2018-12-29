@@ -1,7 +1,7 @@
 //! Operations on characters.
 
 use libc::{c_uchar, ptrdiff_t};
-use std::ptr;
+use std::slice;
 
 use remacs_macros::lisp_fn;
 
@@ -9,9 +9,8 @@ use crate::{
     lisp::defsubr,
     lisp::LispObject,
     multibyte::{char_byte8_p, char_to_byte8, is_ascii, Codepoint, MAX_CHAR},
-    multibyte::{make_char_multibyte, raw_byte_from_codepoint_safe, string_char},
+    multibyte::{make_char_multibyte, multibyte_char_at, raw_byte_from_codepoint_safe},
     remacs_sys::Qcharacterp,
-    remacs_sys::{args_out_of_range, args_out_of_range_3},
     remacs_sys::{EmacsInt, EmacsUint},
     threads::ThreadState,
 };
@@ -121,40 +120,47 @@ pub fn multibyte_char_to_unibyte(ch: LispObject) -> LispObject {
 #[lisp_fn(min = "0")]
 pub fn get_byte(position: LispObject, string: LispObject) -> EmacsUint {
     let current_buffer = ThreadState::current_buffer_unchecked();
-    let p: *const c_uchar;
-    if string.is_nil() {
-        if position.is_nil() {
-            p = current_buffer.byte_pos_addr(current_buffer.pt);
+    let c: Codepoint = if string.is_nil() {
+        let pos = if position.is_nil() {
+            current_buffer.pt
         } else {
-            let pos = position.as_fixnum_coerce_marker_or_error();
-            if pos < (current_buffer.begv as i64) || pos >= (current_buffer.zv as i64) {
-                args_out_of_range!(position, current_buffer.begv, current_buffer.zv)
-            }
-            let pos = position.as_natnum_or_error();
-            p = current_buffer.char_pos_addr(pos as ptrdiff_t);
+            position.as_fixnum_coerce_marker_or_error() as ptrdiff_t
+        };
+        let begv = current_buffer.begv;
+        let zv = current_buffer.zv;
+        if pos < begv || pos >= zv {
+            args_out_of_range!(position, begv, zv);
         }
+
+        let slice = unsafe {
+            slice::from_raw_parts(current_buffer.byte_pos_addr(pos), (zv - pos) as usize)
+        };
+
         if !current_buffer.multibyte_characters_enabled() {
-            return unsafe { (*p).into() };
+            return slice[0].into();
         }
+        multibyte_char_at(slice).0
     } else {
         let s = string.as_string_or_error();
-        if position.is_nil() {
-            p = s.const_data_ptr();
+        let slice = s.as_slice();
+        let pos = if position.is_nil() {
+            0
         } else {
-            let pos = position.as_natnum_or_error();
-            if position.as_fixnum_or_error() >= s.len_chars() as i64 {
-                args_out_of_range!(string, position);
+            let pos = position.as_natnum_or_error() as ptrdiff_t;
+            if pos >= s.len_chars() {
+                args_out_of_range!(s, position);
             }
-            p = unsafe { s.const_data_ptr().offset(s.char_to_byte(pos as isize)) };
-        }
-        if !s.is_multibyte() {
-            return unsafe { (*p).into() };
-        }
-    }
+            s.char_to_byte(pos) as usize
+        };
 
-    let mut c: u32 = unsafe { string_char(p, ptr::null_mut(), ptr::null_mut()) } as u32;
+        if !s.is_multibyte() {
+            return slice[pos].into();
+        }
+        multibyte_char_at(&slice[pos..]).0
+    };
+
     if char_byte8_p(c) {
-        c = char_to_byte8(c).into();
+        return char_to_byte8(c).into();
     } else if !is_ascii(c) {
         error!("Not an ASCII nor an 8-bit character: {}", c);
     }

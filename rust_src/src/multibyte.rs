@@ -175,8 +175,8 @@ impl LispStringRef {
     }
 
     /// Return the byte index corresponding to CHAR_INDEX.
-    pub fn char_to_byte(&self, char_index: isize) -> isize {
-        unsafe { string_char_to_byte((*self).into(), char_index) }
+    pub fn char_to_byte(self, char_index: isize) -> isize {
+        unsafe { string_char_to_byte(self.into(), char_index) }
     }
 
     pub fn equal(

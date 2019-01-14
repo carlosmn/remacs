@@ -119,13 +119,11 @@ pub fn multibyte_char_to_unibyte(ch: LispObject) -> LispObject {
 /// 8-bit character, an error is signaled.
 #[lisp_fn(min = "0")]
 pub fn get_byte(position: LispObject, string: LispObject) -> EmacsUint {
-    let current_buffer = ThreadState::current_buffer_unchecked();
     let c: Codepoint = if string.is_nil() {
-        let pos = if position.is_nil() {
-            current_buffer.pt
-        } else {
-            position.as_fixnum_coerce_marker_or_error() as ptrdiff_t
-        };
+        let current_buffer = ThreadState::current_buffer_unchecked();
+        let pos = position.map_or(current_buffer.pt, |v| {
+            v.as_fixnum_coerce_marker_or_error() as ptrdiff_t
+        });
         let begv = current_buffer.begv;
         let zv = current_buffer.zv;
         if pos < begv || pos >= zv {
@@ -143,15 +141,13 @@ pub fn get_byte(position: LispObject, string: LispObject) -> EmacsUint {
     } else {
         let s = string.as_string_or_error();
         let slice = s.as_slice();
-        let pos = if position.is_nil() {
-            0
-        } else {
-            let pos = position.as_natnum_or_error() as ptrdiff_t;
+        let pos = position.map_or(0, |v| {
+            let pos = v.as_natnum_or_error() as ptrdiff_t;
             if pos >= s.len_chars() {
                 args_out_of_range!(s, position);
             }
             s.char_to_byte(pos) as usize
-        };
+        });
 
         if !s.is_multibyte() {
             return slice[pos].into();
